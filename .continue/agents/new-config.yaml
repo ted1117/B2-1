@@ -1,0 +1,41 @@
+name: Codyssey Public API
+version: 1.0.0
+schema: v1
+
+models:
+  - name: Codyssey GPT-5.5
+    provider: openai
+    model: gpt-5.5
+    apiBase: https://copa.codyssey.kr/v1
+    apiKey: ${{ secrets.OPENAI_API_KEY }}
+    useResponsesApi: false
+    roles:
+      - chat
+      - edit
+      - apply
+    capabilities:
+      - tool_use
+    defaultCompletionOptions:
+      maxTokens: 4096
+
+  - name: Codyssey GPT-5.4
+    provider: openai
+    model: gpt-5.4
+    apiBase: https://copa.codyssey.kr/v1
+    apiKey: ${{ secrets.OPENAI_API_KEY }}
+    useResponsesApi: false
+    roles:
+      - chat
+      - edit
+      - apply
+    capabilities:
+      - tool_use
+    defaultCompletionOptions:
+      maxTokens: 4096
+
+context:
+  - provider: file
+  - provider: code
+  - provider: diff
+  - provider: terminal
+
