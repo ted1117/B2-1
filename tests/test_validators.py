@@ -4,6 +4,8 @@ from datetime import date
 from budget_app.validators import (
     parse_amount,
     parse_date,
+    parse_month,
+    parse_positive_integer,
     validate_category_name,
     validate_transaction_type,
 )
@@ -25,6 +27,18 @@ class ValidatorTest(unittest.TestCase):
         for value in ("0", "-1000", "abc", "1.5", ""):
             with self.subTest(value=value), self.assertRaises(ValueError):
                 parse_amount(value)
+
+    def test_parse_month_accepts_valid_month_and_rejects_invalid_value(self) -> None:
+        self.assertEqual(parse_month(" 2026-09 "), "2026-09")
+        for value in ("2026-9", "2026-00", "2026-13", "0000-01"):
+            with self.subTest(value=value), self.assertRaises(ValueError):
+                parse_month(value)
+
+    def test_parse_positive_integer(self) -> None:
+        self.assertEqual(parse_positive_integer("3", "TOP"), 3)
+        for value in ("0", "-1", "1.5", "abc"):
+            with self.subTest(value=value), self.assertRaises(ValueError):
+                parse_positive_integer(value, "TOP")
 
     def test_validate_transaction_type_accepts_supported_types(self) -> None:
         self.assertEqual(validate_transaction_type(" income "), "income")

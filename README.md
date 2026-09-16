@@ -2,8 +2,8 @@
 
 Python 표준 라이브러리와 JSONL 파일로 거래를 관리하는 콘솔 가계부입니다.
 현재 거래 추가·목록·수정·삭제와 PRD-002 공통 실행 기반까지 구현되어 있습니다.
-카테고리 관리, 검색, 월별 요약, 예산, CSV 입출력은 각 기능 PRD에 따라 이후
-브랜치에서 구현합니다.
+카테고리 관리와 검색은 별도 기능 브랜치에 구현되어 있으며, 현재 브랜치에는
+월별 요약이 구현되어 있습니다. 예산과 CSV 입출력은 이후 브랜치에서 구현합니다.
 
 ## 실행 환경
 
@@ -51,6 +51,10 @@ uv run python -m budget_app delete -id TX-000001
 ```
 
 각 명령의 옵션은 `-help`로 확인합니다.
+
+```zsh
+uv run python -m budget_app summary -month 2026-09 -top 3
+```
 
 ```zsh
 uv run python -m budget_app list -help

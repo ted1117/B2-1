@@ -90,6 +90,37 @@ class TransactionServiceTest(unittest.TestCase):
 
         self.assertEqual(result, list(reversed(transactions[-20:])))
 
+    def test_summarize_month_calculates_totals_and_category_ranking(self) -> None:
+        for transaction in (
+            Transaction("TX-000001", "income", date(2026, 9, 1), 10000, "salary"),
+            Transaction("TX-000002", "expense", date(2026, 9, 1), 3000, "rent"),
+            Transaction("TX-000003", "expense", date(2026, 9, 30), 2000, "food"),
+            Transaction("TX-000004", "expense", date(2026, 9, 15), 1000, "food"),
+            Transaction("TX-000005", "income", date(2026, 10, 1), 99999, "salary"),
+        ):
+            self.repository.add(transaction)
+
+        summary = self.service.summarize_month("2026-09", top=2)
+
+        self.assertEqual(summary.transaction_count, 4)
+        self.assertEqual(summary.total_income, 10000)
+        self.assertEqual(summary.total_expense, 6000)
+        self.assertEqual(summary.balance, 4000)
+        self.assertEqual(summary.category_expenses, [("food", 3000), ("rent", 3000)])
+
+    def test_summarize_empty_and_income_only_month(self) -> None:
+        empty = self.service.summarize_month("2026-08")
+        self.repository.add(
+            Transaction("TX-000001", "income", date(2026, 9, 1), 10000, "salary")
+        )
+        income_only = self.service.summarize_month("2026-09")
+
+        self.assertEqual(empty.transaction_count, 0)
+        self.assertEqual(empty.balance, 0)
+        self.assertEqual(empty.category_expenses, [])
+        self.assertEqual(income_only.total_income, 10000)
+        self.assertEqual(income_only.total_expense, 0)
+
     def test_update_transaction_changes_only_specified_fields(self) -> None:
         original = self.add_transaction()
 

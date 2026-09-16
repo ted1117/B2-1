@@ -2,6 +2,7 @@ import re
 from datetime import date
 
 DATE_PATTERN = re.compile(r"\d{4}-\d{2}-\d{2}")
+MONTH_PATTERN = re.compile(r"\d{4}-\d{2}")
 TRANSACTION_TYPES = {"income", "expense"}
 
 
@@ -32,6 +33,27 @@ def parse_amount(value: str) -> int:
         raise ValueError("금액은 0보다 큰 정수로 입력해 주세요.")
 
     return amount
+
+
+def parse_month(value: str) -> str:
+    value = value.strip()
+    if MONTH_PATTERN.fullmatch(value) is None:
+        raise ValueError("월 형식이 올바르지 않습니다. YYYY-MM 형식으로 입력해 주세요.")
+    year, month = map(int, value.split("-"))
+    try:
+        date(year, month, 1)
+    except ValueError:
+        raise ValueError("존재하지 않는 연도 또는 월입니다.") from None
+    return value
+
+
+def parse_positive_integer(value: str, name: str) -> int:
+    if re.fullmatch(r"[0-9]+", value.strip()) is None:
+        raise ValueError(f"{name}은 1 이상의 정수여야 합니다.")
+    number = int(value)
+    if number < 1:
+        raise ValueError(f"{name}은 1 이상의 정수여야 합니다.")
+    return number
 
 
 def validate_transaction_type(value: str) -> str:

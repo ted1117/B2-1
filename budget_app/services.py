@@ -4,7 +4,7 @@ from collections import deque
 from collections.abc import Iterator
 from datetime import date
 
-from budget_app.models import Transaction
+from budget_app.models import MonthlySummary, Transaction
 from budget_app.repositories import CategoryRepository, TransactionRepository
 
 
@@ -57,6 +57,35 @@ class TransactionService:
     def list_categories(self) -> Iterator[str]:
         """등록된 카테고리 이름을 저장 순서대로 조회한다."""
         yield from self._category_repository.iter_all()
+
+    def summarize_month(self, month: str, top: int = 3) -> MonthlySummary:
+        transaction_count = 0
+        total_income = 0
+        total_expense = 0
+        category_totals: dict[str, int] = {}
+
+        for transaction in self._repository.iter_all():
+            if transaction.date.strftime("%Y-%m") != month:
+                continue
+            transaction_count += 1
+            if transaction.type == "income":
+                total_income += transaction.amount
+            else:
+                total_expense += transaction.amount
+                category_totals[transaction.category] = (
+                    category_totals.get(transaction.category, 0) + transaction.amount
+                )
+
+        category_expenses = sorted(
+            category_totals.items(), key=lambda item: (-item[1], item[0])
+        )[:top]
+        return MonthlySummary(
+            month=month,
+            transaction_count=transaction_count,
+            total_income=total_income,
+            total_expense=total_expense,
+            category_expenses=category_expenses,
+        )
 
     def is_category_registered(self, category: str) -> bool:
         """카테고리가 등록된 목록에 존재하는지 확인한다."""

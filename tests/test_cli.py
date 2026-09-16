@@ -199,7 +199,7 @@ class CliTest(unittest.TestCase):
         self.assertFalse(self.data_directory.exists())
 
     def test_each_crud_command_supports_help(self) -> None:
-        for command in ("add", "list", "update", "delete"):
+        for command in ("add", "list", "update", "delete", "summary"):
             with self.subTest(command=command):
                 exit_code, stdout, stderr = self.run_cli(command, "-help")
                 self.assertEqual(exit_code, 0)
@@ -279,6 +279,43 @@ class CliTest(unittest.TestCase):
         self.assertIn("[파일 오류]", stderr)
         self.assertIn("[힌트]", stderr)
         self.assertNotIn("Traceback", stderr)
+
+    def test_summary_prints_monthly_totals_and_top_categories(self) -> None:
+        self.data_directory.mkdir()
+        repository = TransactionRepository(self.path)
+        for transaction in (
+            Transaction("TX-000001", "income", date(2026, 9, 1), 10000, "salary"),
+            Transaction("TX-000002", "expense", date(2026, 9, 1), 3000, "rent"),
+            Transaction("TX-000003", "expense", date(2026, 9, 30), 3000, "food"),
+        ):
+            repository.add(transaction)
+
+        exit_code, stdout, stderr = self.run_cli(
+            "summary", "-month", "2026-09", "-top", "2"
+        )
+
+        self.assertEqual(exit_code, 0)
+        self.assertEqual(stderr, "")
+        self.assertIn("총 수입: 10000원", stdout)
+        self.assertIn("총 지출: 6000원", stdout)
+        self.assertIn("잔액: 4000원", stdout)
+        self.assertLess(stdout.index("food 3000원"), stdout.index("rent 3000원"))
+
+    def test_summary_handles_empty_month_and_invalid_options(self) -> None:
+        exit_code, stdout, stderr = self.run_cli("summary", "-month", "2026-09")
+        self.assertEqual(exit_code, 0)
+        self.assertIn("데이터 없음", stdout)
+        self.assertIn("총 수입: 0원", stdout)
+        self.assertIn("지출 없음", stdout)
+        self.assertEqual(stderr, "")
+
+        for arguments in (
+            ("summary", "-month", "2026-13"),
+            ("summary", "-month", "2026-09", "-top", "0"),
+        ):
+            exit_code, _, stderr = self.run_cli(*arguments)
+            self.assertEqual(exit_code, 1)
+            self.assertIn("[힌트]", stderr)
 
 
 if __name__ == "__main__":

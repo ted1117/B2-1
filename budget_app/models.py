@@ -54,3 +54,16 @@ class Transaction:
             memo=memo,
             tags=tags,
         )
+
+
+@dataclass(frozen=True)
+class MonthlySummary:
+    month: str
+    transaction_count: int
+    total_income: int
+    total_expense: int
+    category_expenses: list[tuple[str, int]]
+
+    @property
+    def balance(self) -> int:
+        return self.total_income - self.total_expense

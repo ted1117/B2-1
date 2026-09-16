@@ -3,12 +3,14 @@ import sys
 from pathlib import Path
 
 from budget_app.decorators import handle_cli_errors
-from budget_app.models import Transaction
+from budget_app.models import MonthlySummary, Transaction
 from budget_app.repositories import CategoryRepository, TransactionRepository
 from budget_app.services import TransactionService
 from budget_app.validators import (
     parse_amount,
     parse_date,
+    parse_month,
+    parse_positive_integer,
     validate_category_name,
     validate_transaction_type,
 )
@@ -61,6 +63,10 @@ def _build_parser() -> argparse.ArgumentParser:
 
     delete_parser = subparsers.add_parser("delete", help="거래를 삭제한다.")
     delete_parser.add_argument("-id", required=True, help="삭제할 거래 ID")
+
+    summary_parser = subparsers.add_parser("summary", help="월별 요약을 조회한다.")
+    summary_parser.add_argument("-month", required=True, help="조회 월 (YYYY-MM)")
+    summary_parser.add_argument("-top", default="3", help="지출 카테고리 개수")
 
     return parser
 
@@ -183,6 +189,21 @@ def _delete_transaction(service: TransactionService, transaction_id: str) -> boo
     return False
 
 
+def _print_summary(summary: MonthlySummary, top: int) -> None:
+    print(f"{summary.month} 월별 요약")
+    if summary.transaction_count == 0:
+        print("데이터 없음")
+    print(f"총 수입: {summary.total_income}원")
+    print(f"총 지출: {summary.total_expense}원")
+    print(f"잔액: {summary.balance}원")
+    if not summary.category_expenses:
+        print("지출 없음")
+        return
+    print(f"지출 TOP {top}")
+    for rank, (category, amount) in enumerate(summary.category_expenses, start=1):
+        print(f"{rank}) {category} {amount}원")
+
+
 def _initialize_data_files(data_directory: Path) -> None:
     data_directory.mkdir(parents=True, exist_ok=True)
     for file_name in DATA_FILE_NAMES:
@@ -212,6 +233,10 @@ def _execute_command(args: argparse.Namespace) -> int:
         case "delete":
             if not _delete_transaction(service, args.id):
                 return 1
+        case "summary":
+            month = parse_month(args.month)
+            top = parse_positive_integer(args.top, "TOP")
+            _print_summary(service.summarize_month(month, top), top)
 
     return 0
 
