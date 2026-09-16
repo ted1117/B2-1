@@ -2,7 +2,7 @@ import sys
 from collections.abc import Callable
 from functools import wraps
 
-from budget_app.errors import DataFileError
+from budget_app.errors import CsvFileError, DataFileError
 
 
 def handle_cli_errors[**P](function: Callable[P, int]) -> Callable[P, int]:
@@ -14,6 +14,12 @@ def handle_cli_errors[**P](function: Callable[P, int]) -> Callable[P, int]:
             print(f"[데이터 오류] {error}", file=sys.stderr)
             print(
                 "[힌트] 해당 JSONL 줄을 올바른 JSON과 필수 필드로 수정해 주세요.",
+                file=sys.stderr,
+            )
+        except CsvFileError as error:
+            print(f"[CSV 오류] imported=0, {error}", file=sys.stderr)
+            print(
+                "[힌트] CSV 헤더와 해당 행의 형식, 등록 카테고리를 확인해 주세요.",
                 file=sys.stderr,
             )
         except ValueError as error:

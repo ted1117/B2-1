@@ -1,5 +1,5 @@
 import json
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from pathlib import Path
 from tempfile import NamedTemporaryFile
 
@@ -152,6 +152,41 @@ class TransactionRepository:
                 temp_path.replace(self.path)
 
             return deleted
+        finally:
+            if temp_path is not None:
+                temp_path.unlink(missing_ok=True)
+
+    def append_atomically(
+        self,
+        transaction_factory: Callable[[int], Iterator[Transaction]],
+    ) -> int:
+        temp_path: Path | None = None
+        imported_count = 0
+        try:
+            with NamedTemporaryFile(
+                "w",
+                encoding="utf-8",
+                dir=self.path.parent,
+                delete=False,
+            ) as temp_file:
+                temp_path = Path(temp_file.name)
+                max_sequence = 0
+                for transaction in self.iter_all():
+                    temp_file.write(
+                        json.dumps(transaction.to_dict(), ensure_ascii=False) + "\n"
+                    )
+                    prefix, separator, sequence = transaction.id.partition("-")
+                    if prefix == "TX" and separator and sequence.isdigit():
+                        max_sequence = max(max_sequence, int(sequence))
+
+                for transaction in transaction_factory(max_sequence):
+                    temp_file.write(
+                        json.dumps(transaction.to_dict(), ensure_ascii=False) + "\n"
+                    )
+                    imported_count += 1
+
+            temp_path.replace(self.path)
+            return imported_count
         finally:
             if temp_path is not None:
                 temp_path.unlink(missing_ok=True)

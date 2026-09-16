@@ -1,7 +1,10 @@
 import argparse
 import sys
+from calendar import monthrange
+from datetime import date
 from pathlib import Path
 
+from budget_app.csv_io import TransactionCsvService
 from budget_app.decorators import handle_cli_errors
 from budget_app.models import Transaction
 from budget_app.repositories import CategoryRepository, TransactionRepository
@@ -9,6 +12,7 @@ from budget_app.services import TransactionService
 from budget_app.validators import (
     parse_amount,
     parse_date,
+    parse_month,
     validate_category_name,
     validate_transaction_type,
 )
@@ -77,6 +81,17 @@ def _build_parser() -> argparse.ArgumentParser:
     search_parser.add_argument("-type", dest="transaction_type")
     search_parser.add_argument("-q", dest="query")
     search_parser.add_argument("-tag")
+
+    import_parser = subparsers.add_parser("import", help="CSV 거래를 가져온다.")
+    import_parser.add_argument(
+        "-from", dest="source", type=Path, required=True, help="입력 CSV 경로"
+    )
+
+    export_parser = subparsers.add_parser("export", help="거래를 CSV로 내보낸다.")
+    export_parser.add_argument("-out", type=Path, required=True, help="출력 CSV 경로")
+    export_parser.add_argument("-month", help="조회 월 (YYYY-MM)")
+    export_parser.add_argument("-from", dest="from_date", help="시작일")
+    export_parser.add_argument("-to", dest="to_date", help="종료일")
 
     return parser
 
@@ -259,6 +274,29 @@ def _search_transactions(service: TransactionService, args: argparse.Namespace) 
         print("검색 결과 없음")
 
 
+def _export_date_range(args: argparse.Namespace) -> tuple[date, date]:
+    has_range_value = args.from_date is not None or args.to_date is not None
+    if args.month is not None and has_range_value:
+        raise ValueError("-month와 -from/-to는 함께 사용할 수 없습니다.")
+    if args.month is None and not has_range_value:
+        raise ValueError("-month 또는 -from과 -to를 지정해 주세요.")
+    if args.month is not None:
+        month = parse_month(args.month)
+        year, month_number = map(int, month.split("-"))
+        return (
+            date(year, month_number, 1),
+            date(year, month_number, monthrange(year, month_number)[1]),
+        )
+    if args.from_date is None or args.to_date is None:
+        raise ValueError("날짜 범위는 -from과 -to를 모두 지정해야 합니다.")
+
+    from_date = parse_date(args.from_date)
+    to_date = parse_date(args.to_date)
+    if from_date > to_date:
+        raise ValueError("내보내기 시작일은 종료일보다 늦을 수 없습니다.")
+    return from_date, to_date
+
+
 def _initialize_data_files(data_directory: Path) -> None:
     data_directory.mkdir(parents=True, exist_ok=True)
     for file_name in DATA_FILE_NAMES:
@@ -276,6 +314,7 @@ def _execute_command(args: argparse.Namespace) -> int:
     repository = TransactionRepository(data_directory / "transactions.jsonl")
     category_repository = CategoryRepository(data_directory / "categories.jsonl")
     service = TransactionService(repository, category_repository)
+    csv_service = TransactionCsvService(repository, category_repository)
 
     match args.command:
         case "add":
@@ -292,6 +331,13 @@ def _execute_command(args: argparse.Namespace) -> int:
             _manage_category(service, args.category_command)
         case "search":
             _search_transactions(service, args)
+        case "import":
+            imported_count = csv_service.import_file(args.source)
+            print(f"[완료] imported={imported_count}, skipped=0")
+        case "export":
+            from_date, to_date = _export_date_range(args)
+            exported_count = csv_service.export_file(args.out, from_date, to_date)
+            print(f"[완료] path={args.out}, exported={exported_count}")
 
     return 0
 

@@ -262,7 +262,16 @@ class CliTest(unittest.TestCase):
         self.assertFalse(self.data_directory.exists())
 
     def test_each_crud_command_supports_help(self) -> None:
-        for command in ("add", "list", "update", "delete", "category", "search"):
+        for command in (
+            "add",
+            "list",
+            "update",
+            "delete",
+            "category",
+            "search",
+            "import",
+            "export",
+        ):
             with self.subTest(command=command):
                 exit_code, stdout, stderr = self.run_cli(command, "-help")
                 self.assertEqual(exit_code, 0)
@@ -406,6 +415,64 @@ class CliTest(unittest.TestCase):
         self.assertEqual(exit_code, 0)
         self.assertEqual(stdout, "검색 결과 없음\n")
         self.assertEqual(stderr, "")
+
+    def test_import_and_export_commands_report_counts(self) -> None:
+        self.data_directory.mkdir()
+        CategoryRepository(self.category_path).add("food")
+        source = Path(self.temp_directory.name) / "input.csv"
+        source.write_text(
+            "date,type,category,amount,memo,tags\n"
+            "2026-09-13,expense,food,12000,점심,meal\n",
+            encoding="utf-8",
+        )
+
+        exit_code, stdout, stderr = self.run_cli("import", "-from", str(source))
+        self.assertEqual(exit_code, 0)
+        self.assertIn("imported=1, skipped=0", stdout)
+        self.assertEqual(stderr, "")
+
+        destination = Path(self.temp_directory.name) / "output.csv"
+        exit_code, stdout, stderr = self.run_cli(
+            "export", "-out", str(destination), "-month", "2026-09"
+        )
+        self.assertEqual(exit_code, 0)
+        self.assertIn("exported=1", stdout)
+        self.assertEqual(stderr, "")
+        self.assertIn("점심", destination.read_text(encoding="utf-8"))
+
+    def test_export_requires_exactly_one_complete_date_selector(self) -> None:
+        destination = Path(self.temp_directory.name) / "output.csv"
+        cases = (
+            ("export", "-out", str(destination)),
+            (
+                "export",
+                "-out",
+                str(destination),
+                "-month",
+                "2026-09",
+                "-from",
+                "2026-09-01",
+                "-to",
+                "2026-09-30",
+            ),
+            ("export", "-out", str(destination), "-from", "2026-09-01"),
+            ("export", "-out", str(destination), "-month", "2026-13"),
+            (
+                "export",
+                "-out",
+                str(destination),
+                "-from",
+                "2026-09-30",
+                "-to",
+                "2026-09-01",
+            ),
+        )
+
+        for arguments in cases:
+            with self.subTest(arguments=arguments):
+                exit_code, _, stderr = self.run_cli(*arguments)
+                self.assertEqual(exit_code, 1)
+                self.assertIn("[힌트]", stderr)
 
 
 if __name__ == "__main__":
