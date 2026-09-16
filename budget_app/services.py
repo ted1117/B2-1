@@ -54,6 +54,34 @@ class TransactionService:
         transactions = deque(self._repository.iter_all(), maxlen=limit)
         yield from reversed(transactions)
 
+    def search_transactions(
+        self,
+        *,
+        from_date: date | None = None,
+        to_date: date | None = None,
+        category: str | None = None,
+        transaction_type: str | None = None,
+        query: str | None = None,
+        tag: str | None = None,
+    ) -> Iterator[Transaction]:
+        if category is not None and not self.is_category_registered(category):
+            raise ValueError(f"등록되지 않은 카테고리입니다: {category}")
+
+        for transaction in self._repository.iter_reverse():
+            if from_date is not None and transaction.date < from_date:
+                continue
+            if to_date is not None and transaction.date > to_date:
+                continue
+            if category is not None and transaction.category != category:
+                continue
+            if transaction_type is not None and transaction.type != transaction_type:
+                continue
+            if query is not None and query not in transaction.memo:
+                continue
+            if tag is not None and tag not in transaction.tags:
+                continue
+            yield transaction
+
     def list_categories(self) -> Iterator[str]:
         """등록된 카테고리 이름을 저장 순서대로 조회한다."""
         yield from self._category_repository.iter_all()

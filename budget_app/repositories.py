@@ -27,13 +27,64 @@ class TransactionRepository:
             for line_number, line in enumerate(file, start=1):
                 if not line.strip():
                     continue
-                try:
-                    data = json.loads(line)
-                    if not isinstance(data, dict):
-                        raise TypeError("JSON 객체여야 합니다.")
-                    yield Transaction.from_dict(data)
-                except (json.JSONDecodeError, KeyError, TypeError, ValueError) as error:
-                    raise DataFileError(self.path, line_number, str(error)) from None
+                yield self._parse_line(line, line_number)
+
+    def iter_reverse(self) -> Iterator[Transaction]:
+        if not self.path.exists():
+            return
+
+        with self.path.open("rb") as file:
+            file.seek(0, 2)
+            size = file.tell()
+            if size == 0:
+                return
+
+            file.seek(-1, 2)
+            ends_with_newline = file.read(1) == b"\n"
+            file.seek(0)
+            line_number = sum(
+                chunk.count(b"\n") for chunk in iter(lambda: file.read(8192), b"")
+            )
+            if not ends_with_newline:
+                line_number += 1
+
+            position = size
+            buffer = b""
+            skip_trailing_empty = ends_with_newline
+            while position > 0:
+                read_size = min(8192, position)
+                position -= read_size
+                file.seek(position)
+                buffer = file.read(read_size) + buffer
+                parts = buffer.split(b"\n")
+                buffer = parts[0]
+
+                for raw_line in reversed(parts[1:]):
+                    if skip_trailing_empty:
+                        skip_trailing_empty = False
+                        continue
+                    if raw_line.strip():
+                        yield self._parse_bytes(raw_line, line_number)
+                    line_number -= 1
+
+            if line_number >= 1 and buffer.strip():
+                yield self._parse_bytes(buffer, line_number)
+
+    def _parse_bytes(self, raw_line: bytes, line_number: int) -> Transaction:
+        try:
+            line = raw_line.decode("utf-8")
+        except UnicodeDecodeError as error:
+            raise DataFileError(self.path, line_number, str(error)) from None
+        return self._parse_line(line, line_number)
+
+    def _parse_line(self, line: str, line_number: int) -> Transaction:
+        try:
+            data = json.loads(line)
+            if not isinstance(data, dict):
+                raise TypeError("JSON 객체여야 합니다.")
+            return Transaction.from_dict(data)
+        except (json.JSONDecodeError, KeyError, TypeError, ValueError) as error:
+            raise DataFileError(self.path, line_number, str(error)) from None
 
     def find_by_id(self, transaction_id: str) -> bool:
         return any(transaction.id == transaction_id for transaction in self.iter_all())

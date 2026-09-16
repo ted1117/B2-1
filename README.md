@@ -2,8 +2,8 @@
 
 Python 표준 라이브러리와 JSONL 파일로 거래를 관리하는 콘솔 가계부입니다.
 현재 거래 추가·목록·수정·삭제, 공통 실행 기반, 카테고리 관리까지 구현되어
-있습니다. 검색, 월별 요약, 예산, CSV 입출력은 각 기능 PRD에 따라 이후
-브랜치에서 구현합니다.
+있으며 조건 검색도 사용할 수 있습니다. 월별 요약, 예산, CSV 입출력은 각
+기능 PRD에 따라 이후 브랜치에서 구현합니다.
 
 ## 실행 환경
 
@@ -62,6 +62,14 @@ uv run python -m budget_app category remove
 카테고리가 하나도 없으면 거래를 추가할 수 없습니다. 먼저 `category add`를
 실행해야 합니다.
 
+검색 조건은 모두 선택이며 함께 지정하면 AND로 결합됩니다. 결과는 최근 등록
+순서로 출력합니다.
+
+```zsh
+uv run python -m budget_app search -from 2026-09-01 -to 2026-09-30
+uv run python -m budget_app search -category food -type expense -q 점심 -tag meal
+```
+
 각 명령의 옵션은 `-help`로 확인합니다.
 
 ```zsh
@@ -109,4 +117,5 @@ uv run ruff check .
 ```
 
 기능별 범위와 완료 조건은 [전체 PRD](docs/PRD.md)와
-[PRD-002](docs/PRD-002.md), [PRD-003](docs/PRD-003.md)에서 확인할 수 있습니다.
+[PRD-002](docs/PRD-002.md), [PRD-003](docs/PRD-003.md),
+[PRD-004](docs/PRD-004.md)에서 확인할 수 있습니다.

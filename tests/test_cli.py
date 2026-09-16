@@ -262,7 +262,7 @@ class CliTest(unittest.TestCase):
         self.assertFalse(self.data_directory.exists())
 
     def test_each_crud_command_supports_help(self) -> None:
-        for command in ("add", "list", "update", "delete", "category"):
+        for command in ("add", "list", "update", "delete", "category", "search"):
             with self.subTest(command=command):
                 exit_code, stdout, stderr = self.run_cli(command, "-help")
                 self.assertEqual(exit_code, 0)
@@ -351,6 +351,61 @@ class CliTest(unittest.TestCase):
         self.assertIn("[파일 오류]", stderr)
         self.assertIn("[힌트]", stderr)
         self.assertNotIn("Traceback", stderr)
+
+    def test_search_combines_filters_and_prints_latest_first(self) -> None:
+        self.data_directory.mkdir()
+        CategoryRepository(self.category_path).add("food")
+        repository = TransactionRepository(self.path)
+        for transaction_id, transaction_date, memo, tags in (
+            ("TX-000001", date(2026, 9, 1), "점심", ["meal"]),
+            ("TX-000002", date(2026, 9, 15), "저녁", ["meal"]),
+            ("TX-000003", date(2026, 9, 30), "점심 약속", ["meal", "work"]),
+        ):
+            repository.add(
+                Transaction(
+                    id=transaction_id,
+                    type="expense",
+                    date=transaction_date,
+                    amount=1000,
+                    category="food",
+                    memo=memo,
+                    tags=tags,
+                )
+            )
+
+        exit_code, stdout, stderr = self.run_cli(
+            "search",
+            "-from",
+            "2026-09-01",
+            "-to",
+            "2026-09-30",
+            "-category",
+            "food",
+            "-type",
+            "expense",
+            "-q",
+            "점심",
+            "-tag",
+            "meal",
+        )
+
+        self.assertEqual(exit_code, 0)
+        self.assertEqual(stderr, "")
+        self.assertLess(stdout.index("TX-000003"), stdout.index("TX-000001"))
+        self.assertNotIn("TX-000002", stdout)
+
+    def test_search_validates_range_and_prints_empty_result(self) -> None:
+        exit_code, stdout, stderr = self.run_cli(
+            "search", "-from", "2026-10-01", "-to", "2026-09-01"
+        )
+        self.assertEqual(exit_code, 1)
+        self.assertEqual(stdout, "")
+        self.assertIn("시작일", stderr)
+
+        exit_code, stdout, stderr = self.run_cli("search", "-q", "없음")
+        self.assertEqual(exit_code, 0)
+        self.assertEqual(stdout, "검색 결과 없음\n")
+        self.assertEqual(stderr, "")
 
 
 if __name__ == "__main__":

@@ -70,6 +70,14 @@ def _build_parser() -> argparse.ArgumentParser:
     category_subparsers.add_parser("list", help="카테고리 목록을 조회한다.")
     category_subparsers.add_parser("remove", help="카테고리를 삭제한다.")
 
+    search_parser = subparsers.add_parser("search", help="거래를 검색한다.")
+    search_parser.add_argument("-from", dest="from_date")
+    search_parser.add_argument("-to", dest="to_date")
+    search_parser.add_argument("-category")
+    search_parser.add_argument("-type", dest="transaction_type")
+    search_parser.add_argument("-q", dest="query")
+    search_parser.add_argument("-tag")
+
     return parser
 
 
@@ -218,6 +226,39 @@ def _manage_category(service: TransactionService, command: str) -> None:
     print(f"[삭제 완료] category={category}")
 
 
+def _search_transactions(service: TransactionService, args: argparse.Namespace) -> None:
+    from_date = parse_date(args.from_date) if args.from_date is not None else None
+    to_date = parse_date(args.to_date) if args.to_date is not None else None
+    if from_date is not None and to_date is not None and from_date > to_date:
+        raise ValueError("검색 시작일은 종료일보다 늦을 수 없습니다.")
+
+    category = args.category.strip() if args.category is not None else None
+    query = args.query.strip() if args.query is not None else None
+    tag = args.tag.strip() if args.tag is not None else None
+    for name, value in (("카테고리", category), ("검색어", query), ("태그", tag)):
+        if value == "":
+            raise ValueError(f"{name}는 비워둘 수 없습니다.")
+
+    transaction_type = (
+        validate_transaction_type(args.transaction_type)
+        if args.transaction_type is not None
+        else None
+    )
+    found = False
+    for transaction in service.search_transactions(
+        from_date=from_date,
+        to_date=to_date,
+        category=category,
+        transaction_type=transaction_type,
+        query=query,
+        tag=tag,
+    ):
+        found = True
+        print(_format_transaction(transaction))
+    if not found:
+        print("검색 결과 없음")
+
+
 def _initialize_data_files(data_directory: Path) -> None:
     data_directory.mkdir(parents=True, exist_ok=True)
     for file_name in DATA_FILE_NAMES:
@@ -249,6 +290,8 @@ def _execute_command(args: argparse.Namespace) -> int:
                 return 1
         case "category":
             _manage_category(service, args.category_command)
+        case "search":
+            _search_transactions(service, args)
 
     return 0
 

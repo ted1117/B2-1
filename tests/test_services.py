@@ -115,6 +115,70 @@ class TransactionServiceTest(unittest.TestCase):
 
         self.assertEqual(result, list(reversed(transactions[-20:])))
 
+    def test_search_transactions_combines_filters_and_returns_latest_first(
+        self,
+    ) -> None:
+        first = self.service.add_transaction(
+            transaction_type="expense",
+            transaction_date=date(2026, 9, 1),
+            amount=1000,
+            category="food",
+            memo="점심 식사",
+            tags=["meal"],
+        )
+        self.service.add_transaction(
+            transaction_type="income",
+            transaction_date=date(2026, 9, 15),
+            amount=3000,
+            category="food",
+            memo="환급",
+            tags=["work"],
+        )
+        third = self.service.add_transaction(
+            transaction_type="expense",
+            transaction_date=date(2026, 9, 30),
+            amount=2000,
+            category="food",
+            memo="점심 식사",
+            tags=["meal", "work"],
+        )
+
+        result = list(
+            self.service.search_transactions(
+                from_date=date(2026, 9, 1),
+                to_date=date(2026, 9, 30),
+                category="food",
+                transaction_type="expense",
+                query="점심",
+                tag="meal",
+            )
+        )
+
+        self.assertEqual(result, [third, first])
+
+    def test_search_tag_is_exact_and_no_filters_returns_all(self) -> None:
+        first = self.service.add_transaction(
+            transaction_type="expense",
+            transaction_date=date(2026, 9, 1),
+            amount=1000,
+            category="food",
+            tags=["meal-time"],
+        )
+        second = self.service.add_transaction(
+            transaction_type="expense",
+            transaction_date=date(2026, 9, 2),
+            amount=2000,
+            category="food",
+            tags=["meal"],
+        )
+
+        self.assertEqual(list(self.service.search_transactions(tag="meal")), [second])
+        self.assertEqual(list(self.service.search_transactions()), [second, first])
+
+    def test_search_rejects_unregistered_category(self) -> None:
+        with self.assertRaisesRegex(ValueError, "등록되지 않은"):
+            list(self.service.search_transactions(category="transport"))
+
     def test_update_transaction_changes_only_specified_fields(self) -> None:
         original = self.add_transaction()
 

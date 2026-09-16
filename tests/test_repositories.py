@@ -73,6 +73,26 @@ class TransactionRepositoryTest(unittest.TestCase):
         )
         self.assertIn("점심", self.path.read_text(encoding="utf-8"))
 
+    def test_iter_reverse_streams_latest_first_across_long_utf8_line(self) -> None:
+        first = make_transaction("TX-000001", memo="가" * 9000)
+        second = make_transaction("TX-000002", memo="저녁")
+        self.repository.add(first)
+        self.repository.add(second)
+        content = self.path.read_bytes().rstrip(b"\n")
+        self.path.write_bytes(b"\n" + content)
+
+        self.assertEqual(list(self.repository.iter_reverse()), [second, first])
+
+    def test_iter_reverse_reports_original_line_number_for_invalid_json(self) -> None:
+        self.repository.add(make_transaction("TX-000001"))
+        with self.path.open("a", encoding="utf-8") as file:
+            file.write("not-json\n")
+
+        with self.assertRaises(DataFileError) as context:
+            list(self.repository.iter_reverse())
+
+        self.assertEqual(context.exception.line_number, 2)
+
     def test_find_by_id_reports_whether_transaction_exists(self) -> None:
         self.repository.add(make_transaction("TX-000001"))
 
