@@ -4,8 +4,12 @@ from collections import deque
 from collections.abc import Iterator
 from datetime import date
 
-from budget_app.models import MonthlySummary, Transaction
-from budget_app.repositories import CategoryRepository, TransactionRepository
+from budget_app.models import Budget, MonthlySummary, Transaction
+from budget_app.repositories import (
+    BudgetRepository,
+    CategoryRepository,
+    TransactionRepository,
+)
 
 
 class TransactionService:
@@ -13,9 +17,11 @@ class TransactionService:
         self,
         repository: TransactionRepository,
         category_repository: CategoryRepository,
+        budget_repository: BudgetRepository | None = None,
     ) -> None:
         self._repository = repository
         self._category_repository = category_repository
+        self._budget_repository = budget_repository
 
     def add_transaction(
         self,
@@ -86,6 +92,20 @@ class TransactionService:
             total_expense=total_expense,
             category_expenses=category_expenses,
         )
+
+    def set_budget(self, month: str, amount: int) -> Budget:
+        if self._budget_repository is None:
+            raise RuntimeError("예산 저장소가 설정되지 않았습니다.")
+        if amount <= 0:
+            raise ValueError("예산 금액은 0보다 커야 합니다.")
+        budget = Budget(month=month, amount=amount)
+        self._budget_repository.upsert(budget)
+        return budget
+
+    def get_budget(self, month: str) -> Budget | None:
+        if self._budget_repository is None:
+            return None
+        return self._budget_repository.find(month)
 
     def is_category_registered(self, category: str) -> bool:
         """카테고리가 등록된 목록에 존재하는지 확인한다."""

@@ -67,3 +67,29 @@ class MonthlySummary:
     @property
     def balance(self) -> int:
         return self.total_income - self.total_expense
+
+
+@dataclass(frozen=True)
+class Budget:
+    month: str
+    amount: int
+
+    def to_dict(self) -> dict[str, str | int]:
+        return {"month": self.month, "amount": self.amount}
+
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> Self:
+        month = data["month"]
+        amount = data["amount"]
+        if not isinstance(month, str):
+            raise ValueError("month는 YYYY-MM 문자열이어야 합니다.")
+        try:
+            if len(month) != 7 or month[4] != "-":
+                raise ValueError
+            year, month_number = map(int, month.split("-"))
+            date(year, month_number, 1)
+        except ValueError:
+            raise ValueError("month는 실제 달력의 YYYY-MM이어야 합니다.") from None
+        if isinstance(amount, bool) or not isinstance(amount, int) or amount <= 0:
+            raise ValueError("amount는 0보다 큰 정수여야 합니다.")
+        return cls(month=month, amount=amount)

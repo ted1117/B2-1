@@ -4,7 +4,7 @@ from pathlib import Path
 from tempfile import NamedTemporaryFile
 
 from budget_app.errors import DataFileError
-from budget_app.models import Transaction
+from budget_app.models import Budget, Transaction
 
 
 class TransactionRepository:
@@ -139,3 +139,52 @@ class CategoryRepository:
 
     def exists(self, category: str) -> bool:
         return any(current == category for current in self.iter_all())
+
+
+class BudgetRepository:
+    def __init__(self, path: Path) -> None:
+        self._path = path
+
+    def iter_all(self) -> Iterator[Budget]:
+        if not self._path.exists():
+            return
+        with self._path.open("r", encoding="utf-8") as file:
+            for line_number, line in enumerate(file, start=1):
+                if not line.strip():
+                    continue
+                try:
+                    data = json.loads(line)
+                    if not isinstance(data, dict):
+                        raise TypeError("JSON 객체여야 합니다.")
+                    yield Budget.from_dict(data)
+                except (json.JSONDecodeError, KeyError, TypeError, ValueError) as error:
+                    raise DataFileError(self._path, line_number, str(error)) from None
+
+    def find(self, month: str) -> Budget | None:
+        return next(
+            (budget for budget in self.iter_all() if budget.month == month), None
+        )
+
+    def upsert(self, budget: Budget) -> None:
+        temp_path: Path | None = None
+        try:
+            with NamedTemporaryFile(
+                "w", encoding="utf-8", dir=self._path.parent, delete=False
+            ) as temp_file:
+                temp_path = Path(temp_file.name)
+                replaced = False
+                for current in self.iter_all():
+                    if current.month == budget.month:
+                        current = budget
+                        replaced = True
+                    temp_file.write(
+                        json.dumps(current.to_dict(), ensure_ascii=False) + "\n"
+                    )
+                if not replaced:
+                    temp_file.write(
+                        json.dumps(budget.to_dict(), ensure_ascii=False) + "\n"
+                    )
+            temp_path.replace(self._path)
+        finally:
+            if temp_path is not None:
+                temp_path.unlink(missing_ok=True)

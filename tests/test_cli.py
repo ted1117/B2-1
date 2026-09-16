@@ -199,12 +199,17 @@ class CliTest(unittest.TestCase):
         self.assertFalse(self.data_directory.exists())
 
     def test_each_crud_command_supports_help(self) -> None:
-        for command in ("add", "list", "update", "delete", "summary"):
+        for command in ("add", "list", "update", "delete", "summary", "budget"):
             with self.subTest(command=command):
                 exit_code, stdout, stderr = self.run_cli(command, "-help")
                 self.assertEqual(exit_code, 0)
                 self.assertIn("usage:", stdout)
                 self.assertEqual(stderr, "")
+
+        exit_code, stdout, stderr = self.run_cli("budget", "set", "-help")
+        self.assertEqual(exit_code, 0)
+        self.assertIn("usage:", stdout)
+        self.assertEqual(stderr, "")
 
     def test_list_uses_default_limit_twenty_and_registration_order(self) -> None:
         self.data_directory.mkdir()
@@ -316,6 +321,42 @@ class CliTest(unittest.TestCase):
             exit_code, _, stderr = self.run_cli(*arguments)
             self.assertEqual(exit_code, 1)
             self.assertIn("[힌트]", stderr)
+
+    def test_budget_set_persists_and_summary_shows_usage_and_warning(self) -> None:
+        exit_code, stdout, stderr = self.run_cli(
+            "budget", "set", "-month", "2026-09", "-amount", "1000"
+        )
+        self.assertEqual(exit_code, 0)
+        self.assertIn("2026-09 예산 1000원", stdout)
+        self.assertEqual(stderr, "")
+
+        TransactionRepository(self.path).add(
+            Transaction("TX-000001", "expense", date(2026, 9, 1), 1001, "food")
+        )
+        exit_code, stdout, stderr = self.run_cli("summary", "-month", "2026-09")
+        self.assertEqual(exit_code, 0)
+        self.assertIn("예산: 1000원 (사용률 100.1%)", stdout)
+        self.assertIn("예산 초과", stdout)
+        self.assertEqual(stderr, "")
+
+    def test_budget_equal_expense_has_no_warning_and_invalid_amount_is_rejected(
+        self,
+    ) -> None:
+        self.run_cli("budget", "set", "-month", "2026-09", "-amount", "1000")
+        TransactionRepository(self.path).add(
+            Transaction("TX-000001", "expense", date(2026, 9, 1), 1000, "food")
+        )
+        exit_code, stdout, stderr = self.run_cli("summary", "-month", "2026-09")
+        self.assertEqual(exit_code, 0)
+        self.assertIn("사용률 100.0%", stdout)
+        self.assertNotIn("예산 초과", stdout)
+        self.assertEqual(stderr, "")
+
+        exit_code, _, stderr = self.run_cli(
+            "budget", "set", "-month", "2026-09", "-amount", "0"
+        )
+        self.assertEqual(exit_code, 1)
+        self.assertIn("[힌트]", stderr)
 
 
 if __name__ == "__main__":

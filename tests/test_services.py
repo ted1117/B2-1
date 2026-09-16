@@ -4,7 +4,11 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 
 from budget_app.models import Transaction
-from budget_app.repositories import CategoryRepository, TransactionRepository
+from budget_app.repositories import (
+    BudgetRepository,
+    CategoryRepository,
+    TransactionRepository,
+)
 from budget_app.services import TransactionService
 
 
@@ -14,12 +18,15 @@ class TransactionServiceTest(unittest.TestCase):
         self.addCleanup(self.temp_directory.cleanup)
         path = Path(self.temp_directory.name) / "transactions.jsonl"
         category_path = Path(self.temp_directory.name) / "categories.jsonl"
+        budget_path = Path(self.temp_directory.name) / "budgets.jsonl"
+        budget_path.touch()
         self.repository = TransactionRepository(path)
         self.category_repository = CategoryRepository(category_path)
         self.category_repository.add("food")
         self.service = TransactionService(
             self.repository,
             self.category_repository,
+            BudgetRepository(budget_path),
         )
 
     def add_transaction(self, amount: int = 1000) -> Transaction:
@@ -120,6 +127,19 @@ class TransactionServiceTest(unittest.TestCase):
         self.assertEqual(empty.category_expenses, [])
         self.assertEqual(income_only.total_income, 10000)
         self.assertEqual(income_only.total_expense, 0)
+
+    def test_set_and_get_budget(self) -> None:
+        first = self.service.set_budget("2026-09", 200000)
+        second = self.service.set_budget("2026-09", 300000)
+
+        self.assertEqual(first.amount, 200000)
+        self.assertEqual(second.amount, 300000)
+        self.assertEqual(self.service.get_budget("2026-09"), second)
+        self.assertIsNone(self.service.get_budget("2026-10"))
+
+    def test_set_budget_rejects_non_positive_amount(self) -> None:
+        with self.assertRaises(ValueError):
+            self.service.set_budget("2026-09", 0)
 
     def test_update_transaction_changes_only_specified_fields(self) -> None:
         original = self.add_transaction()
