@@ -6,13 +6,18 @@ from pathlib import Path
 
 from budget_app.csv_io import TransactionCsvService
 from budget_app.decorators import handle_cli_errors
-from budget_app.models import Transaction
-from budget_app.repositories import CategoryRepository, TransactionRepository
+from budget_app.models import Budget, MonthlySummary, Transaction
+from budget_app.repositories import (
+    BudgetRepository,
+    CategoryRepository,
+    TransactionRepository,
+)
 from budget_app.services import TransactionService
 from budget_app.validators import (
     parse_amount,
     parse_date,
     parse_month,
+    parse_positive_integer,
     validate_category_name,
     validate_transaction_type,
 )
@@ -92,6 +97,18 @@ def _build_parser() -> argparse.ArgumentParser:
     export_parser.add_argument("-month", help="조회 월 (YYYY-MM)")
     export_parser.add_argument("-from", dest="from_date", help="시작일")
     export_parser.add_argument("-to", dest="to_date", help="종료일")
+
+    summary_parser = subparsers.add_parser("summary", help="월별 요약을 조회한다.")
+    summary_parser.add_argument("-month", required=True, help="조회 월 (YYYY-MM)")
+    summary_parser.add_argument("-top", default="3", help="지출 카테고리 개수")
+
+    budget_parser = subparsers.add_parser("budget", help="월 예산을 관리한다.")
+    budget_subparsers = budget_parser.add_subparsers(
+        dest="budget_command", required=True
+    )
+    budget_set_parser = budget_subparsers.add_parser("set", help="월 예산을 설정한다.")
+    budget_set_parser.add_argument("-month", required=True)
+    budget_set_parser.add_argument("-amount", required=True)
 
     return parser
 
@@ -297,6 +314,26 @@ def _export_date_range(args: argparse.Namespace) -> tuple[date, date]:
     return from_date, to_date
 
 
+def _print_summary(summary: MonthlySummary, top: int, budget: Budget | None) -> None:
+    print(f"{summary.month} 월별 요약")
+    if summary.transaction_count == 0:
+        print("데이터 없음")
+    print(f"총 수입: {summary.total_income}원")
+    print(f"총 지출: {summary.total_expense}원")
+    print(f"잔액: {summary.balance}원")
+    if budget is not None:
+        usage = summary.total_expense / budget.amount * 100
+        print(f"예산: {budget.amount}원 (사용률 {usage:.1f}%)")
+        if summary.total_expense > budget.amount:
+            print("[경고] 예산 초과")
+    if not summary.category_expenses:
+        print("지출 없음")
+        return
+    print(f"지출 TOP {top}")
+    for rank, (category, amount) in enumerate(summary.category_expenses, start=1):
+        print(f"{rank}) {category} {amount}원")
+
+
 def _initialize_data_files(data_directory: Path) -> None:
     data_directory.mkdir(parents=True, exist_ok=True)
     for file_name in DATA_FILE_NAMES:
@@ -313,7 +350,8 @@ def _execute_command(args: argparse.Namespace) -> int:
 
     repository = TransactionRepository(data_directory / "transactions.jsonl")
     category_repository = CategoryRepository(data_directory / "categories.jsonl")
-    service = TransactionService(repository, category_repository)
+    budget_repository = BudgetRepository(data_directory / "budgets.jsonl")
+    service = TransactionService(repository, category_repository, budget_repository)
     csv_service = TransactionCsvService(repository, category_repository)
 
     match args.command:
@@ -338,6 +376,17 @@ def _execute_command(args: argparse.Namespace) -> int:
             from_date, to_date = _export_date_range(args)
             exported_count = csv_service.export_file(args.out, from_date, to_date)
             print(f"[완료] path={args.out}, exported={exported_count}")
+        case "summary":
+            month = parse_month(args.month)
+            top = parse_positive_integer(args.top, "TOP")
+            _print_summary(
+                service.summarize_month(month, top), top, service.get_budget(month)
+            )
+        case "budget":
+            month = parse_month(args.month)
+            amount = parse_amount(args.amount)
+            budget = service.set_budget(month, amount)
+            print(f"[저장 완료] {budget.month} 예산 {budget.amount}원")
 
     return 0
 

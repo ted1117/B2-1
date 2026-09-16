@@ -4,7 +4,11 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 
 from budget_app.models import Transaction
-from budget_app.repositories import CategoryRepository, TransactionRepository
+from budget_app.repositories import (
+    BudgetRepository,
+    CategoryRepository,
+    TransactionRepository,
+)
 from budget_app.services import TransactionService
 
 
@@ -14,12 +18,15 @@ class TransactionServiceTest(unittest.TestCase):
         self.addCleanup(self.temp_directory.cleanup)
         path = Path(self.temp_directory.name) / "transactions.jsonl"
         category_path = Path(self.temp_directory.name) / "categories.jsonl"
+        budget_path = Path(self.temp_directory.name) / "budgets.jsonl"
+        budget_path.touch()
         self.repository = TransactionRepository(path)
         self.category_repository = CategoryRepository(category_path)
         self.category_repository.add("food")
         self.service = TransactionService(
             self.repository,
             self.category_repository,
+            BudgetRepository(budget_path),
         )
 
     def add_transaction(self, amount: int = 1000) -> Transaction:
@@ -178,6 +185,50 @@ class TransactionServiceTest(unittest.TestCase):
     def test_search_rejects_unregistered_category(self) -> None:
         with self.assertRaisesRegex(ValueError, "등록되지 않은"):
             list(self.service.search_transactions(category="transport"))
+
+    def test_summarize_month_calculates_totals_and_category_ranking(self) -> None:
+        for transaction in (
+            Transaction("TX-000001", "income", date(2026, 9, 1), 10000, "salary"),
+            Transaction("TX-000002", "expense", date(2026, 9, 1), 3000, "rent"),
+            Transaction("TX-000003", "expense", date(2026, 9, 30), 2000, "food"),
+            Transaction("TX-000004", "expense", date(2026, 9, 15), 1000, "food"),
+            Transaction("TX-000005", "income", date(2026, 10, 1), 99999, "salary"),
+        ):
+            self.repository.add(transaction)
+
+        summary = self.service.summarize_month("2026-09", top=2)
+
+        self.assertEqual(summary.transaction_count, 4)
+        self.assertEqual(summary.total_income, 10000)
+        self.assertEqual(summary.total_expense, 6000)
+        self.assertEqual(summary.balance, 4000)
+        self.assertEqual(summary.category_expenses, [("food", 3000), ("rent", 3000)])
+
+    def test_summarize_empty_and_income_only_month(self) -> None:
+        empty = self.service.summarize_month("2026-08")
+        self.repository.add(
+            Transaction("TX-000001", "income", date(2026, 9, 1), 10000, "salary")
+        )
+        income_only = self.service.summarize_month("2026-09")
+
+        self.assertEqual(empty.transaction_count, 0)
+        self.assertEqual(empty.balance, 0)
+        self.assertEqual(empty.category_expenses, [])
+        self.assertEqual(income_only.total_income, 10000)
+        self.assertEqual(income_only.total_expense, 0)
+
+    def test_set_and_get_budget(self) -> None:
+        first = self.service.set_budget("2026-09", 200000)
+        second = self.service.set_budget("2026-09", 300000)
+
+        self.assertEqual(first.amount, 200000)
+        self.assertEqual(second.amount, 300000)
+        self.assertEqual(self.service.get_budget("2026-09"), second)
+        self.assertIsNone(self.service.get_budget("2026-10"))
+
+    def test_set_budget_rejects_non_positive_amount(self) -> None:
+        with self.assertRaises(ValueError):
+            self.service.set_budget("2026-09", 0)
 
     def test_update_transaction_changes_only_specified_fields(self) -> None:
         original = self.add_transaction()

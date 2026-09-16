@@ -271,6 +271,8 @@ class CliTest(unittest.TestCase):
             "search",
             "import",
             "export",
+            "summary",
+            "budget",
         ):
             with self.subTest(command=command):
                 exit_code, stdout, stderr = self.run_cli(command, "-help")
@@ -284,6 +286,11 @@ class CliTest(unittest.TestCase):
                 self.assertEqual(exit_code, 0)
                 self.assertIn("usage:", stdout)
                 self.assertEqual(stderr, "")
+
+        exit_code, stdout, stderr = self.run_cli("budget", "set", "-help")
+        self.assertEqual(exit_code, 0)
+        self.assertIn("usage:", stdout)
+        self.assertEqual(stderr, "")
 
     def test_list_uses_default_limit_twenty_and_registration_order(self) -> None:
         self.data_directory.mkdir()
@@ -415,6 +422,79 @@ class CliTest(unittest.TestCase):
         self.assertEqual(exit_code, 0)
         self.assertEqual(stdout, "검색 결과 없음\n")
         self.assertEqual(stderr, "")
+
+    def test_summary_prints_monthly_totals_and_top_categories(self) -> None:
+        self.data_directory.mkdir()
+        repository = TransactionRepository(self.path)
+        for transaction in (
+            Transaction("TX-000001", "income", date(2026, 9, 1), 10000, "salary"),
+            Transaction("TX-000002", "expense", date(2026, 9, 1), 3000, "rent"),
+            Transaction("TX-000003", "expense", date(2026, 9, 30), 3000, "food"),
+        ):
+            repository.add(transaction)
+
+        exit_code, stdout, stderr = self.run_cli(
+            "summary", "-month", "2026-09", "-top", "2"
+        )
+
+        self.assertEqual(exit_code, 0)
+        self.assertEqual(stderr, "")
+        self.assertIn("총 수입: 10000원", stdout)
+        self.assertIn("총 지출: 6000원", stdout)
+        self.assertIn("잔액: 4000원", stdout)
+        self.assertLess(stdout.index("food 3000원"), stdout.index("rent 3000원"))
+
+    def test_summary_handles_empty_month_and_invalid_options(self) -> None:
+        exit_code, stdout, stderr = self.run_cli("summary", "-month", "2026-09")
+        self.assertEqual(exit_code, 0)
+        self.assertIn("데이터 없음", stdout)
+        self.assertIn("총 수입: 0원", stdout)
+        self.assertIn("지출 없음", stdout)
+        self.assertEqual(stderr, "")
+
+        for arguments in (
+            ("summary", "-month", "2026-13"),
+            ("summary", "-month", "2026-09", "-top", "0"),
+        ):
+            exit_code, _, stderr = self.run_cli(*arguments)
+            self.assertEqual(exit_code, 1)
+            self.assertIn("[힌트]", stderr)
+
+    def test_budget_set_persists_and_summary_shows_usage_and_warning(self) -> None:
+        exit_code, stdout, stderr = self.run_cli(
+            "budget", "set", "-month", "2026-09", "-amount", "1000"
+        )
+        self.assertEqual(exit_code, 0)
+        self.assertIn("2026-09 예산 1000원", stdout)
+        self.assertEqual(stderr, "")
+
+        TransactionRepository(self.path).add(
+            Transaction("TX-000001", "expense", date(2026, 9, 1), 1001, "food")
+        )
+        exit_code, stdout, stderr = self.run_cli("summary", "-month", "2026-09")
+        self.assertEqual(exit_code, 0)
+        self.assertIn("예산: 1000원 (사용률 100.1%)", stdout)
+        self.assertIn("예산 초과", stdout)
+        self.assertEqual(stderr, "")
+
+    def test_budget_equal_expense_has_no_warning_and_invalid_amount_is_rejected(
+        self,
+    ) -> None:
+        self.run_cli("budget", "set", "-month", "2026-09", "-amount", "1000")
+        TransactionRepository(self.path).add(
+            Transaction("TX-000001", "expense", date(2026, 9, 1), 1000, "food")
+        )
+        exit_code, stdout, stderr = self.run_cli("summary", "-month", "2026-09")
+        self.assertEqual(exit_code, 0)
+        self.assertIn("사용률 100.0%", stdout)
+        self.assertNotIn("예산 초과", stdout)
+        self.assertEqual(stderr, "")
+
+        exit_code, _, stderr = self.run_cli(
+            "budget", "set", "-month", "2026-09", "-amount", "0"
+        )
+        self.assertEqual(exit_code, 1)
+        self.assertIn("[힌트]", stderr)
 
     def test_import_and_export_commands_report_counts(self) -> None:
         self.data_directory.mkdir()

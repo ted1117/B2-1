@@ -48,6 +48,15 @@ def parse_month(value: str) -> str:
     return value
 
 
+def parse_positive_integer(value: str, name: str) -> int:
+    if re.fullmatch(r"[0-9]+", value.strip()) is None:
+        raise ValueError(f"{name}은 1 이상의 정수여야 합니다.")
+    number = int(value)
+    if number < 1:
+        raise ValueError(f"{name}은 1 이상의 정수여야 합니다.")
+    return number
+
+
 def validate_transaction_type(value: str) -> str:
     """거래 타입이 income 또는 expense인지 확인한다."""
     value = value.strip()

@@ -5,8 +5,12 @@ from tempfile import TemporaryDirectory
 from unittest.mock import patch
 
 from budget_app.errors import DataFileError
-from budget_app.models import Transaction
-from budget_app.repositories import CategoryRepository, TransactionRepository
+from budget_app.models import Budget, Transaction
+from budget_app.repositories import (
+    BudgetRepository,
+    CategoryRepository,
+    TransactionRepository,
+)
 
 
 def make_transaction(
@@ -220,6 +224,50 @@ class CategoryRepositoryTest(unittest.TestCase):
             self.repository.delete("food")
 
         self.assertEqual(self.path.read_bytes(), original)
+
+
+class BudgetRepositoryTest(unittest.TestCase):
+    def setUp(self) -> None:
+        self.temp_directory = TemporaryDirectory()
+        self.addCleanup(self.temp_directory.cleanup)
+        self.path = Path(self.temp_directory.name) / "budgets.jsonl"
+        self.path.touch()
+        self.repository = BudgetRepository(self.path)
+
+    def test_upsert_adds_and_replaces_month_without_losing_other_month(self) -> None:
+        self.repository.upsert(Budget("2026-08", 100000))
+        self.repository.upsert(Budget("2026-09", 200000))
+        self.repository.upsert(Budget("2026-09", 300000))
+
+        self.assertEqual(
+            list(self.repository.iter_all()),
+            [Budget("2026-08", 100000), Budget("2026-09", 300000)],
+        )
+        self.assertEqual(self.repository.find("2026-09"), Budget("2026-09", 300000))
+
+    def test_upsert_failure_preserves_original_file(self) -> None:
+        self.repository.upsert(Budget("2026-09", 200000))
+        original = self.path.read_bytes()
+
+        with (
+            patch(
+                "budget_app.repositories.NamedTemporaryFile",
+                side_effect=OSError("임시 파일 생성 실패"),
+            ),
+            self.assertRaises(OSError),
+        ):
+            self.repository.upsert(Budget("2026-09", 300000))
+
+        self.assertEqual(self.path.read_bytes(), original)
+
+    def test_iter_all_rejects_invalid_stored_month(self) -> None:
+        self.path.write_text('{"month":"2026-13","amount":1000}\n', encoding="utf-8")
+
+        with self.assertRaises(DataFileError) as context:
+            list(self.repository.iter_all())
+
+        self.assertEqual(context.exception.line_number, 1)
+        self.assertIn("YYYY-MM", context.exception.reason)
 
 
 if __name__ == "__main__":
