@@ -42,12 +42,15 @@ class TransactionService:
         self._repository.add(transaction)
         return transaction
 
-    def list_transactions(self, limit: int | None = None) -> Iterator[Transaction]:
+    def list_transactions(self, limit: int = 20) -> Iterator[Transaction]:
         """저장된 거래를 최신순으로 조회한다.
 
         조회 개수가 지정되면 가장 최근에 저장된 거래부터 해당 개수만큼
         반환한다.
         """
+        if limit < 1:
+            raise ValueError("조회 개수는 1 이상의 정수여야 합니다.")
+
         transactions = deque(self._repository.iter_all(), maxlen=limit)
         yield from reversed(transactions)
 

@@ -2,7 +2,9 @@ import unittest
 from datetime import date
 from pathlib import Path
 from tempfile import TemporaryDirectory
+from unittest.mock import patch
 
+from budget_app.errors import DataFileError
 from budget_app.models import Transaction
 from budget_app.repositories import CategoryRepository, TransactionRepository
 
@@ -33,6 +35,29 @@ class TransactionRepositoryTest(unittest.TestCase):
 
     def test_iter_all_returns_empty_iterator_when_file_does_not_exist(self) -> None:
         self.assertEqual(list(self.repository.iter_all()), [])
+
+    def test_iter_all_reports_path_and_line_for_invalid_data(self) -> None:
+        self.path.write_text("\n{}\n", encoding="utf-8")
+
+        with self.assertRaises(DataFileError) as context:
+            list(self.repository.iter_all())
+
+        self.assertEqual(context.exception.path, self.path)
+        self.assertEqual(context.exception.line_number, 2)
+        self.assertIn("id", context.exception.reason)
+
+    def test_iter_all_rejects_invalid_transaction_field_type(self) -> None:
+        self.path.write_text(
+            '{"id":"TX-000001","type":"expense","date":"2026-09-11",'
+            '"amount":"1000","category":"food"}\n',
+            encoding="utf-8",
+        )
+
+        with self.assertRaises(DataFileError) as context:
+            list(self.repository.iter_all())
+
+        self.assertEqual(context.exception.line_number, 1)
+        self.assertIn("amount", context.exception.reason)
 
     def test_add_appends_jsonl_and_iter_all_restores_transactions(self) -> None:
         first = make_transaction("TX-000001")
@@ -76,6 +101,22 @@ class TransactionRepositoryTest(unittest.TestCase):
         self.assertFalse(result)
         self.assertEqual(self.path.read_text(encoding="utf-8"), original)
 
+    def test_update_temp_file_failure_preserves_original_file(self) -> None:
+        transaction = make_transaction("TX-000001")
+        self.repository.add(transaction)
+        original = self.path.read_bytes()
+
+        with (
+            patch(
+                "budget_app.repositories.NamedTemporaryFile",
+                side_effect=OSError("임시 파일 생성 실패"),
+            ),
+            self.assertRaises(OSError),
+        ):
+            self.repository.update(make_transaction("TX-000001", amount=15000))
+
+        self.assertEqual(self.path.read_bytes(), original)
+
     def test_delete_removes_only_matching_transaction(self) -> None:
         first = make_transaction("TX-000001")
         second = make_transaction("TX-000002")
@@ -116,6 +157,15 @@ class CategoryRepositoryTest(unittest.TestCase):
             len(self.path.read_text(encoding="utf-8").splitlines()),
             2,
         )
+
+    def test_iter_all_reports_invalid_category_line(self) -> None:
+        self.path.write_text('{"name": 1}\n', encoding="utf-8")
+
+        with self.assertRaises(DataFileError) as context:
+            list(self.repository.iter_all())
+
+        self.assertEqual(context.exception.line_number, 1)
+        self.assertIn("name", context.exception.reason)
 
 
 if __name__ == "__main__":

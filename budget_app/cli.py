@@ -2,6 +2,7 @@ import argparse
 import sys
 from pathlib import Path
 
+from budget_app.decorators import handle_cli_errors
 from budget_app.models import Transaction
 from budget_app.repositories import CategoryRepository, TransactionRepository
 from budget_app.services import TransactionService
@@ -12,30 +13,54 @@ from budget_app.validators import (
     validate_transaction_type,
 )
 
-TRANSACTION_PATH = Path("data/transactions.jsonl")
-CATEGORY_PATH = Path("data/categories.jsonl")
+DEFAULT_DATA_DIRECTORY = Path("data")
+DATA_FILE_NAMES = (
+    "transactions.jsonl",
+    "categories.jsonl",
+    "budgets.jsonl",
+)
+
+
+class BudgetArgumentParser(argparse.ArgumentParser):
+    def __init__(self, *args: object, **kwargs: object) -> None:
+        kwargs["add_help"] = False
+        super().__init__(*args, **kwargs)
+        self.add_argument("-help", action="help", help="사용 방법을 출력한다.")
+
+    def error(self, message: str) -> None:
+        self.print_usage(sys.stderr)
+        self.exit(
+            2,
+            f"[인자 오류] {message}\n[힌트] -help로 사용 방법을 확인해 주세요.\n",
+        )
 
 
 def _build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(prog="budget_app")
+    parser = BudgetArgumentParser(prog="budget_app")
+    parser.add_argument(
+        "-data-dir",
+        type=Path,
+        default=DEFAULT_DATA_DIRECTORY,
+        help="JSONL 데이터 폴더 (기본값: ./data)",
+    )
     subparsers = parser.add_subparsers(dest="command", required=True)
 
     subparsers.add_parser("add", help="거래를 추가한다.")
 
     list_parser = subparsers.add_parser("list", help="거래 목록을 조회한다.")
-    list_parser.add_argument("--limit", type=int, help="조회할 거래 개수")
+    list_parser.add_argument("-limit", type=int, default=20, help="조회할 거래 개수")
 
     update_parser = subparsers.add_parser("update", help="거래를 수정한다.")
-    update_parser.add_argument("--id", required=True, help="수정할 거래 ID")
-    update_parser.add_argument("--type", dest="transaction_type")
-    update_parser.add_argument("--date", dest="transaction_date")
-    update_parser.add_argument("--amount")
-    update_parser.add_argument("--category")
-    update_parser.add_argument("--memo")
-    update_parser.add_argument("--tags", help="쉼표로 구분한 태그")
+    update_parser.add_argument("-id", required=True, help="수정할 거래 ID")
+    update_parser.add_argument("-type", dest="transaction_type")
+    update_parser.add_argument("-date", dest="transaction_date")
+    update_parser.add_argument("-amount")
+    update_parser.add_argument("-category")
+    update_parser.add_argument("-memo")
+    update_parser.add_argument("-tags", help="쉼표로 구분한 태그")
 
     delete_parser = subparsers.add_parser("delete", help="거래를 삭제한다.")
-    delete_parser.add_argument("--id", required=True, help="삭제할 거래 ID")
+    delete_parser.add_argument("-id", required=True, help="삭제할 거래 ID")
 
     return parser
 
@@ -95,9 +120,13 @@ def _format_transaction(transaction: Transaction) -> str:
     )
 
 
-def _list_transactions(service: TransactionService, limit: int | None) -> None:
+def _list_transactions(service: TransactionService, limit: int) -> None:
+    found = False
     for transaction in service.list_transactions(limit):
+        found = True
         print(_format_transaction(transaction))
+    if not found:
+        print("데이터 없음")
 
 
 def _update_transaction(service: TransactionService, args: argparse.Namespace) -> bool:
@@ -130,6 +159,10 @@ def _update_transaction(service: TransactionService, args: argparse.Namespace) -
         return True
 
     print(f"[수정 실패] 존재하지 않는 ID입니다: {args.id}", file=sys.stderr)
+    print(
+        "[힌트] list 명령으로 저장된 거래 ID를 확인해 주세요.",
+        file=sys.stderr,
+    )
     return False
 
 
@@ -139,40 +172,55 @@ def _delete_transaction(service: TransactionService, transaction_id: str) -> boo
         print(f"[삭제 완료] id={transaction_id}")
         return True
 
-    print(f"[삭제 실패] 존재하지 않는 ID입니다: {transaction_id}", file=sys.stderr)
+    print(
+        f"[삭제 실패] 존재하지 않는 ID입니다: {transaction_id}",
+        file=sys.stderr,
+    )
+    print(
+        "[힌트] list 명령으로 저장된 거래 ID를 확인해 주세요.",
+        file=sys.stderr,
+    )
     return False
+
+
+def _initialize_data_files(data_directory: Path) -> None:
+    data_directory.mkdir(parents=True, exist_ok=True)
+    for file_name in DATA_FILE_NAMES:
+        (data_directory / file_name).touch(exist_ok=True)
+
+
+@handle_cli_errors
+def _execute_command(args: argparse.Namespace) -> int:
+    data_directory: Path = args.data_dir
+    _initialize_data_files(data_directory)
+
+    if args.command == "list" and args.limit < 1:
+        raise ValueError("-limit는 1 이상의 정수여야 합니다.")
+
+    repository = TransactionRepository(data_directory / "transactions.jsonl")
+    category_repository = CategoryRepository(data_directory / "categories.jsonl")
+    service = TransactionService(repository, category_repository)
+
+    match args.command:
+        case "add":
+            _add_transaction(service)
+        case "list":
+            _list_transactions(service, args.limit)
+        case "update":
+            if not _update_transaction(service, args):
+                return 1
+        case "delete":
+            if not _delete_transaction(service, args.id):
+                return 1
+
+    return 0
 
 
 def main() -> int:
     parser = _build_parser()
-    args = parser.parse_args()
-
-    if args.command == "list" and args.limit is not None and args.limit < 1:
-        parser.error("--limit는 1 이상의 정수여야 합니다.")
-
-    repository = TransactionRepository(TRANSACTION_PATH)
-    category_repository = CategoryRepository(CATEGORY_PATH)
-    service = TransactionService(repository, category_repository)
-
     try:
-        match args.command:
-            case "add":
-                _add_transaction(service)
-            case "list":
-                _list_transactions(service, args.limit)
-            case "update":
-                if not _update_transaction(service, args):
-                    return 1
-            case "delete":
-                if not _delete_transaction(service, args.id):
-                    return 1
-    except ValueError as error:
-        print(f"[입력 오류] {error}", file=sys.stderr)
-        print("입력 형식과 허용 범위를 확인해 주세요.", file=sys.stderr)
-        return 1
-    except OSError as error:
-        print(f"[파일 오류] {error}", file=sys.stderr)
-        print("데이터 파일 경로와 쓰기 권한을 확인해 주세요.", file=sys.stderr)
-        return 1
+        args = parser.parse_args()
+    except SystemExit as error:
+        return int(error.code)
 
-    return 0
+    return _execute_command(args)

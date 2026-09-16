@@ -3,6 +3,7 @@ from collections.abc import Iterator
 from pathlib import Path
 from tempfile import NamedTemporaryFile
 
+from budget_app.errors import DataFileError
 from budget_app.models import Transaction
 
 
@@ -23,10 +24,16 @@ class TransactionRepository:
             return
 
         with self.path.open("r", encoding="utf-8") as file:
-            for line in file:
+            for line_number, line in enumerate(file, start=1):
                 if not line.strip():
                     continue
-                yield Transaction.from_dict(json.loads(line))
+                try:
+                    data = json.loads(line)
+                    if not isinstance(data, dict):
+                        raise TypeError("JSON 객체여야 합니다.")
+                    yield Transaction.from_dict(data)
+                except (json.JSONDecodeError, KeyError, TypeError, ValueError) as error:
+                    raise DataFileError(self.path, line_number, str(error)) from None
 
     def find_by_id(self, transaction_id: str) -> bool:
         return any(transaction.id == transaction_id for transaction in self.iter_all())
@@ -116,10 +123,19 @@ class CategoryRepository:
             return
 
         with self.path.open("r", encoding="utf-8") as file:
-            for line in file:
+            for line_number, line in enumerate(file, start=1):
                 if not line.strip():
                     continue
-                yield json.loads(line)["name"]
+                try:
+                    data = json.loads(line)
+                    if not isinstance(data, dict):
+                        raise TypeError("JSON 객체여야 합니다.")
+                    name = data["name"]
+                    if not isinstance(name, str) or not name.strip():
+                        raise ValueError("name은 비어 있지 않은 문자열이어야 합니다.")
+                    yield name
+                except (json.JSONDecodeError, KeyError, TypeError, ValueError) as error:
+                    raise DataFileError(self.path, line_number, str(error)) from None
 
     def exists(self, category: str) -> bool:
         return any(current == category for current in self.iter_all())

@@ -83,6 +83,13 @@ class TransactionServiceTest(unittest.TestCase):
         self.assertEqual(transactions, [third, second])
         self.assertNotIn(first, transactions)
 
+    def test_list_transactions_uses_default_limit_twenty(self) -> None:
+        transactions = [self.add_transaction(sequence) for sequence in range(1, 26)]
+
+        result = list(self.service.list_transactions())
+
+        self.assertEqual(result, list(reversed(transactions[-20:])))
+
     def test_update_transaction_changes_only_specified_fields(self) -> None:
         original = self.add_transaction()
 
