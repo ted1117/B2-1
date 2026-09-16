@@ -44,13 +44,14 @@ class CliTest(unittest.TestCase):
         return exit_code, stdout.getvalue(), stderr.getvalue()
 
     def test_add_update_list_and_delete_commands(self) -> None:
+        self.data_directory.mkdir()
+        CategoryRepository(self.category_path).add("food")
         exit_code, stdout, stderr = self.run_cli(
             "add",
             inputs=[
                 "2026-09-11",
                 "expense",
                 "food",
-                "y",
                 "12000",
                 "점심",
                 "meal,weekday",
@@ -58,7 +59,6 @@ class CliTest(unittest.TestCase):
         )
         self.assertEqual(exit_code, 0)
         self.assertIn("[저장 완료] id=TX-000001", stdout)
-        self.assertIn("[카테고리 등록 완료] food", stdout)
         self.assertEqual(stderr, "")
         self.assertTrue(CategoryRepository(self.category_path).exists("food"))
 
@@ -118,6 +118,8 @@ class CliTest(unittest.TestCase):
         self.assertFalse(CategoryRepository(self.category_path).exists("transport"))
 
     def test_invalid_add_input_returns_error_without_writing_transaction(self) -> None:
+        self.data_directory.mkdir()
+        CategoryRepository(self.category_path).add("food")
         exit_code, stdout, stderr = self.run_cli(
             "add",
             inputs=["2026-13-40"],
@@ -130,6 +132,67 @@ class CliTest(unittest.TestCase):
             list(TransactionRepository(self.path).iter_all()),
             [],
         )
+
+    def test_add_requires_category_command_when_category_list_is_empty(self) -> None:
+        exit_code, stdout, stderr = self.run_cli("add")
+
+        self.assertEqual(exit_code, 1)
+        self.assertEqual(stdout, "")
+        self.assertIn("category add", stderr)
+        self.assertEqual(self.path.read_text(), "")
+
+    def test_category_add_list_and_remove_commands(self) -> None:
+        exit_code, stdout, stderr = self.run_cli("category", "add", inputs=[" food "])
+        self.assertEqual(exit_code, 0)
+        self.assertIn("category=food", stdout)
+        self.assertEqual(stderr, "")
+
+        exit_code, stdout, stderr = self.run_cli("category", "list")
+        self.assertEqual(exit_code, 0)
+        self.assertEqual(stdout, "- food\n")
+        self.assertEqual(stderr, "")
+
+        exit_code, stdout, stderr = self.run_cli("category", "remove", inputs=["food"])
+        self.assertEqual(exit_code, 0)
+        self.assertIn("category=food", stdout)
+        self.assertEqual(stderr, "")
+        self.assertFalse(CategoryRepository(self.category_path).exists("food"))
+
+    def test_category_commands_reject_duplicate_missing_and_used_names(self) -> None:
+        self.data_directory.mkdir()
+        category_repository = CategoryRepository(self.category_path)
+        category_repository.add("food")
+
+        exit_code, _, stderr = self.run_cli("category", "add", inputs=["food"])
+        self.assertEqual(exit_code, 1)
+        self.assertIn("이미 등록된", stderr)
+
+        exit_code, _, stderr = self.run_cli("category", "remove", inputs=["transport"])
+        self.assertEqual(exit_code, 1)
+        self.assertIn("등록되지 않은", stderr)
+
+        TransactionRepository(self.path).add(
+            Transaction(
+                id="TX-000001",
+                type="expense",
+                date=date(2026, 9, 11),
+                amount=1000,
+                category="food",
+            )
+        )
+        exit_code, _, stderr = self.run_cli("category", "remove", inputs=["food"])
+        self.assertEqual(exit_code, 1)
+        self.assertIn("사용 중", stderr)
+        self.assertIn("먼저 수정하거나 삭제", stderr)
+        self.assertTrue(category_repository.exists("food"))
+
+    def test_empty_category_list_prints_registration_guide(self) -> None:
+        exit_code, stdout, stderr = self.run_cli("category", "list")
+
+        self.assertEqual(exit_code, 0)
+        self.assertIn("등록된 카테고리 없음", stdout)
+        self.assertIn("category add", stdout)
+        self.assertEqual(stderr, "")
 
     def test_update_and_delete_missing_id_return_error(self) -> None:
         exit_code, _, stderr = self.run_cli(
@@ -199,9 +262,16 @@ class CliTest(unittest.TestCase):
         self.assertFalse(self.data_directory.exists())
 
     def test_each_crud_command_supports_help(self) -> None:
-        for command in ("add", "list", "update", "delete"):
+        for command in ("add", "list", "update", "delete", "category"):
             with self.subTest(command=command):
                 exit_code, stdout, stderr = self.run_cli(command, "-help")
+                self.assertEqual(exit_code, 0)
+                self.assertIn("usage:", stdout)
+                self.assertEqual(stderr, "")
+
+        for command in ("add", "list", "remove"):
+            with self.subTest(category_command=command):
+                exit_code, stdout, stderr = self.run_cli("category", command, "-help")
                 self.assertEqual(exit_code, 0)
                 self.assertIn("usage:", stdout)
                 self.assertEqual(stderr, "")
@@ -261,6 +331,8 @@ class CliTest(unittest.TestCase):
         self.assertNotIn("Traceback", stderr)
 
     def test_interrupted_input_returns_error_without_saving_transaction(self) -> None:
+        self.data_directory.mkdir()
+        CategoryRepository(self.category_path).add("food")
         exit_code, stdout, stderr = self.run_cli("add", inputs=[EOFError()])
 
         self.assertEqual(exit_code, 1)

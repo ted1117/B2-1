@@ -1,8 +1,8 @@
 # 나만의 용돈 기입장
 
 Python 표준 라이브러리와 JSONL 파일로 거래를 관리하는 콘솔 가계부입니다.
-현재 거래 추가·목록·수정·삭제와 PRD-002 공통 실행 기반까지 구현되어 있습니다.
-카테고리 관리, 검색, 월별 요약, 예산, CSV 입출력은 각 기능 PRD에 따라 이후
+현재 거래 추가·목록·수정·삭제, 공통 실행 기반, 카테고리 관리까지 구현되어
+있습니다. 검색, 월별 요약, 예산, CSV 입출력은 각 기능 PRD에 따라 이후
 브랜치에서 구현합니다.
 
 ## 실행 환경
@@ -49,6 +49,18 @@ uv run python -m budget_app update \
 ```zsh
 uv run python -m budget_app delete -id TX-000001
 ```
+
+카테고리는 별도 명령으로 추가·조회·삭제합니다. 거래가 사용 중인 카테고리는
+삭제할 수 없습니다.
+
+```zsh
+uv run python -m budget_app category add
+uv run python -m budget_app category list
+uv run python -m budget_app category remove
+```
+
+카테고리가 하나도 없으면 거래를 추가할 수 없습니다. 먼저 `category add`를
+실행해야 합니다.
 
 각 명령의 옵션은 `-help`로 확인합니다.
 
@@ -97,4 +109,4 @@ uv run ruff check .
 ```
 
 기능별 범위와 완료 조건은 [전체 PRD](docs/PRD.md)와
-[PRD-002](docs/PRD-002.md)에서 확인할 수 있습니다.
+[PRD-002](docs/PRD-002.md), [PRD-003](docs/PRD-003.md)에서 확인할 수 있습니다.

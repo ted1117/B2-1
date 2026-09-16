@@ -167,6 +167,40 @@ class CategoryRepositoryTest(unittest.TestCase):
         self.assertEqual(context.exception.line_number, 1)
         self.assertIn("name", context.exception.reason)
 
+    def test_delete_removes_only_matching_category(self) -> None:
+        self.repository.add("food")
+        self.repository.add("Food")
+        self.repository.add("transport")
+
+        result = self.repository.delete("food")
+
+        self.assertTrue(result)
+        self.assertEqual(list(self.repository.iter_all()), ["Food", "transport"])
+
+    def test_delete_missing_category_preserves_original_file(self) -> None:
+        self.repository.add("food")
+        original = self.path.read_bytes()
+
+        result = self.repository.delete("transport")
+
+        self.assertFalse(result)
+        self.assertEqual(self.path.read_bytes(), original)
+
+    def test_delete_temp_file_failure_preserves_original_file(self) -> None:
+        self.repository.add("food")
+        original = self.path.read_bytes()
+
+        with (
+            patch(
+                "budget_app.repositories.NamedTemporaryFile",
+                side_effect=OSError("임시 파일 생성 실패"),
+            ),
+            self.assertRaises(OSError),
+        ):
+            self.repository.delete("food")
+
+        self.assertEqual(self.path.read_bytes(), original)
+
 
 if __name__ == "__main__":
     unittest.main()

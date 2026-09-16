@@ -2,13 +2,39 @@
 
 ## 전체 과제 구현 계획
 
-상태: PRD-002 구현 완료 / PRD-003~007 구현 미착수
+상태: PRD-002~003 구현 완료 / PRD-004~007 구현 미착수
 
 - 전체 요구사항과 브랜치별 구현 순서: [PRD](PRD.md)
 - PRD-002~007: 공통 CLI, 카테고리 관리, 거래 검색, 월별 요약, 월 예산, CSV 입출력
 - PRD 문서 커밋 `eab1007`은 `develop`과 원격 저장소에 반영했다.
 - 신규 feature 브랜치 6개도 `eab1007`까지 갱신해 원격 추적 브랜치로 연결했다.
-- 현재 브랜치 `feature/cli-foundation`에서 PRD-002를 구현했다.
+- 현재 브랜치 `feature/category-management`에서 PRD-003을 구현했다.
+
+## PRD-003 카테고리 관리
+
+상태: 구현 완료
+
+### 완료된 작업
+
+- `category add/list/remove`와 각 단계의 `-help`
+- 이름 공백 제거, 빈 이름·중복·없는 이름 오류 처리
+- 저장 순서 조회와 빈 목록의 `category add` 안내
+- 사용 중 카테고리 삭제 차단과 거래 정리 힌트
+- 카테고리 삭제의 임시 파일·원자적 교체·실패 시 원본 보존
+- 빈 카테고리 목록에서 거래 추가 차단
+- 거래 수정 시 등록된 카테고리만 허용
+- 대소문자를 구분하는 이름 정책과 영구 저장 검증
+
+### 검증 결과
+
+- `uv run python -m unittest discover -v`: 55개 통과
+- `uv run ruff format .`: 통과
+- `uv run ruff check .`: 통과
+
+### 다음 작업
+
+1. PRD-003 변경을 커밋하고 `feature/category-management`에 푸시한다.
+2. [PRD-004](PRD-004.md)의 거래 검색을 구현한다.
 
 ## PRD-002 공통 CLI 및 실행 기반
 
@@ -31,12 +57,6 @@
 - `uv run ruff format .`: 통과
 - `uv run ruff check .`: 통과
 - 실제 CLI에서 빈 임시 경로에 저장 파일 3개 생성 및 `데이터 없음` 출력 확인
-
-### 다음 작업
-
-1. PRD-002 변경을 커밋하고 `feature/cli-foundation`에 푸시한다.
-2. 검토 후 `develop`에 반영한다.
-3. [PRD-003](PRD-003.md)의 카테고리 관리를 구현한다.
 
 ## PRD-001 Transaction 기능
 

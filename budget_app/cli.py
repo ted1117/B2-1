@@ -62,6 +62,14 @@ def _build_parser() -> argparse.ArgumentParser:
     delete_parser = subparsers.add_parser("delete", help="거래를 삭제한다.")
     delete_parser.add_argument("-id", required=True, help="삭제할 거래 ID")
 
+    category_parser = subparsers.add_parser("category", help="카테고리를 관리한다.")
+    category_subparsers = category_parser.add_subparsers(
+        dest="category_command", required=True
+    )
+    category_subparsers.add_parser("add", help="카테고리를 추가한다.")
+    category_subparsers.add_parser("list", help="카테고리 목록을 조회한다.")
+    category_subparsers.add_parser("remove", help="카테고리를 삭제한다.")
+
     return parser
 
 
@@ -92,6 +100,11 @@ def _select_category(service: TransactionService) -> str:
 
 
 def _add_transaction(service: TransactionService) -> None:
+    if not service.has_categories():
+        raise ValueError(
+            "등록된 카테고리가 없습니다. category add를 먼저 실행해 주세요."
+        )
+
     transaction_date = parse_date(input("날짜 (YYYY-MM-DD): "))
     transaction_type = validate_transaction_type(input("타입 (income/expense): "))
     category = _select_category(service)
@@ -183,6 +196,28 @@ def _delete_transaction(service: TransactionService, transaction_id: str) -> boo
     return False
 
 
+def _manage_category(service: TransactionService, command: str) -> None:
+    if command == "add":
+        category = validate_category_name(input("카테고리명: "))
+        service.add_category(category)
+        print(f"[저장 완료] category={category}")
+        return
+
+    if command == "list":
+        found = False
+        for category in service.list_categories():
+            found = True
+            print(f"- {category}")
+        if not found:
+            print("등록된 카테고리 없음")
+            print("[안내] category add를 먼저 실행해 주세요.")
+        return
+
+    category = validate_category_name(input("삭제할 카테고리명: "))
+    service.remove_category(category)
+    print(f"[삭제 완료] category={category}")
+
+
 def _initialize_data_files(data_directory: Path) -> None:
     data_directory.mkdir(parents=True, exist_ok=True)
     for file_name in DATA_FILE_NAMES:
@@ -212,6 +247,8 @@ def _execute_command(args: argparse.Namespace) -> int:
         case "delete":
             if not _delete_transaction(service, args.id):
                 return 1
+        case "category":
+            _manage_category(service, args.category_command)
 
     return 0
 

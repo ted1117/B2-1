@@ -139,3 +139,35 @@ class CategoryRepository:
 
     def exists(self, category: str) -> bool:
         return any(current == category for current in self.iter_all())
+
+    def delete(self, category: str) -> bool:
+        if not self.path.exists():
+            return False
+
+        deleted = False
+        temp_path: Path | None = None
+
+        try:
+            with NamedTemporaryFile(
+                "w",
+                encoding="utf-8",
+                dir=self.path.parent,
+                delete=False,
+            ) as temp_file:
+                temp_path = Path(temp_file.name)
+
+                for current in self.iter_all():
+                    if current == category:
+                        deleted = True
+                        continue
+                    temp_file.write(
+                        json.dumps({"name": current}, ensure_ascii=False) + "\n"
+                    )
+
+            if deleted:
+                temp_path.replace(self.path)
+
+            return deleted
+        finally:
+            if temp_path is not None:
+                temp_path.unlink(missing_ok=True)

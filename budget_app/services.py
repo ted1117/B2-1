@@ -58,6 +58,9 @@ class TransactionService:
         """등록된 카테고리 이름을 저장 순서대로 조회한다."""
         yield from self._category_repository.iter_all()
 
+    def has_categories(self) -> bool:
+        return next(self._category_repository.iter_all(), None) is not None
+
     def is_category_registered(self, category: str) -> bool:
         """카테고리가 등록된 목록에 존재하는지 확인한다."""
         return self._category_repository.exists(category)
@@ -69,6 +72,30 @@ class TransactionService:
             raise ValueError("카테고리 이름은 비워둘 수 없습니다.")
         if not self.is_category_registered(category):
             self._category_repository.add(category)
+
+    def add_category(self, category: str) -> None:
+        category = category.strip()
+        if not category:
+            raise ValueError("카테고리 이름은 비워둘 수 없습니다.")
+        if self.is_category_registered(category):
+            raise ValueError(f"이미 등록된 카테고리입니다: {category}")
+        self._category_repository.add(category)
+
+    def remove_category(self, category: str) -> None:
+        category = category.strip()
+        if not category:
+            raise ValueError("카테고리 이름은 비워둘 수 없습니다.")
+        if not self.is_category_registered(category):
+            raise ValueError(f"등록되지 않은 카테고리입니다: {category}")
+        if any(
+            transaction.category == category
+            for transaction in self._repository.iter_all()
+        ):
+            raise ValueError(
+                f"사용 중인 카테고리는 삭제할 수 없습니다: {category}. "
+                "연결된 거래를 먼저 수정하거나 삭제해 주세요."
+            )
+        self._category_repository.delete(category)
 
     def update_transaction(
         self,
@@ -91,6 +118,9 @@ class TransactionService:
         )
         if existing_transaction is None:
             return False
+
+        if category is not None and not self.is_category_registered(category):
+            raise ValueError(f"등록되지 않은 카테고리입니다: {category}")
 
         updated_transaction = Transaction(
             id=existing_transaction.id,

@@ -60,6 +60,31 @@ class TransactionServiceTest(unittest.TestCase):
             ["food", "transport"],
         )
 
+    def test_add_category_rejects_duplicate_and_preserves_case(self) -> None:
+        self.service.add_category(" Food ")
+
+        with self.assertRaisesRegex(ValueError, "이미 등록된"):
+            self.service.add_category("food")
+
+        self.assertEqual(list(self.service.list_categories()), ["food", "Food"])
+
+    def test_remove_unused_category_and_reject_missing_category(self) -> None:
+        self.service.add_category("transport")
+
+        self.service.remove_category("transport")
+
+        self.assertFalse(self.service.is_category_registered("transport"))
+        with self.assertRaisesRegex(ValueError, "등록되지 않은"):
+            self.service.remove_category("transport")
+
+    def test_remove_category_rejects_category_used_by_transaction(self) -> None:
+        self.add_transaction()
+
+        with self.assertRaisesRegex(ValueError, "사용 중"):
+            self.service.remove_category("food")
+
+        self.assertTrue(self.service.is_category_registered("food"))
+
     def test_new_id_uses_max_sequence_when_lower_id_was_deleted(self) -> None:
         first = self.add_transaction()
         second = self.add_transaction()
@@ -107,6 +132,14 @@ class TransactionServiceTest(unittest.TestCase):
         self.assertEqual(updated.date, original.date)
         self.assertEqual(updated.category, original.category)
         self.assertEqual(updated.tags, original.tags)
+
+    def test_update_transaction_rejects_unregistered_category(self) -> None:
+        original = self.add_transaction()
+
+        with self.assertRaisesRegex(ValueError, "등록되지 않은"):
+            self.service.update_transaction(original.id, category="transport")
+
+        self.assertEqual(next(self.repository.iter_all()), original)
 
     def test_update_and_delete_return_false_for_missing_id(self) -> None:
         self.assertFalse(self.service.update_transaction("TX-999999", amount=15000))
