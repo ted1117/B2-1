@@ -3,26 +3,26 @@
 ## 실행 방법
 
 실행 환경은 Python 3.12이며 애플리케이션은 표준 라이브러리만 사용합니다.
-프로젝트 루트에서 `uv`로 실행합니다.
+프로젝트 루트에서 Python 모듈로 실행합니다.
 
 ```zsh
-uv run python -m budget_app -help
+python -m budget_app -help
 ```
 
 옵션은 과제 제약사항에 따라 단일 하이픈을 사용합니다. 기본 데이터 폴더는
 `./data`이며, 다른 폴더를 사용하려면 하위 명령 앞에 `-data-dir`을 지정합니다.
 
 ```zsh
-uv run python -m budget_app -data-dir ./my-data list -limit 10
+python -m budget_app -data-dir ./my-data list -limit 10
 ```
 
 초기 카테고리는 자동 생성하지 않으므로 처음 사용할 때 카테고리를 먼저
 등록합니다.
 
 ```zsh
-uv run python -m budget_app category add
-uv run python -m budget_app add
-uv run python -m budget_app list
+python -m budget_app category add
+python -m budget_app add
+python -m budget_app list
 ```
 
 ## 저장 파일 위치와 형식
@@ -60,20 +60,20 @@ data/
 거래 추가는 날짜, 타입, 카테고리, 금액, 메모와 태그를 대화형으로 입력합니다.
 
 ```zsh
-uv run python -m budget_app add
+python -m budget_app add
 ```
 
 거래 목록은 최근 등록순이며 기본 20건을 출력합니다.
 
 ```zsh
-uv run python -m budget_app list
-uv run python -m budget_app list -limit 3
+python -m budget_app list
+python -m budget_app list -limit 3
 ```
 
 기간, 카테고리, 타입, 메모와 태그 조건으로 거래를 검색합니다.
 
 ```zsh
-uv run python -m budget_app search \
+python -m budget_app search \
   -from 2026-09-01 \
   -to 2026-09-30 \
   -category food \
@@ -85,28 +85,28 @@ uv run python -m budget_app search \
 월별 합계와 카테고리 지출 TOP N을 조회합니다.
 
 ```zsh
-uv run python -m budget_app summary -month 2026-09 -top 3
+python -m budget_app summary -month 2026-09 -top 3
 ```
 
 월 예산을 설정한 뒤 `summary`에서 사용률과 초과 여부를 확인합니다.
 
 ```zsh
-uv run python -m budget_app budget set -month 2026-09 -amount 500000
-uv run python -m budget_app summary -month 2026-09
+python -m budget_app budget set -month 2026-09 -amount 500000
+python -m budget_app summary -month 2026-09
 ```
 
 카테고리를 추가·조회·삭제합니다.
 
 ```zsh
-uv run python -m budget_app category add
-uv run python -m budget_app category list
-uv run python -m budget_app category remove
+python -m budget_app category add
+python -m budget_app category list
+python -m budget_app category remove
 ```
 
 거래 수정은 옵션 기반이며 지정한 필드만 변경합니다.
 
 ```zsh
-uv run python -m budget_app update \
+python -m budget_app update \
   -id TX-000001 \
   -amount 15000 \
   -memo "저녁"
@@ -115,15 +115,15 @@ uv run python -m budget_app update \
 ID로 거래를 삭제합니다.
 
 ```zsh
-uv run python -m budget_app delete -id TX-000001
+python -m budget_app delete -id TX-000001
 ```
 
 CSV 거래를 가져오거나 월·날짜 범위의 거래를 내보냅니다.
 
 ```zsh
-uv run python -m budget_app import -from import.csv
-uv run python -m budget_app export -out september.csv -month 2026-09
-uv run python -m budget_app export \
+python -m budget_app import -from import.csv
+python -m budget_app export -out september.csv -month 2026-09
+python -m budget_app export \
   -out range.csv \
   -from 2026-09-01 \
   -to 2026-09-15
